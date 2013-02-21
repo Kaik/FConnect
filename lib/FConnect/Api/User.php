@@ -79,7 +79,7 @@ class FConnect_Api_User extends Zikula_AbstractApi
 	
 	}
   /**
- * find connected users
+ * find connected user
  */
 	public function get_myuid_bymyfb_id($fb_id)
 	{
@@ -114,35 +114,6 @@ class FConnect_Api_User extends Zikula_AbstractApi
 	  return true;
 	}
 	
-	  /**
- * Setup connection private?
- */
-	public function getunnamefromemail($email)
-	{
-		
-		$aaa = explode('@',$email);
-		$basename = $a[0];
-	
-	  return $this->generateuname($basename);
-	}
-	
-	/**
- * Setup connection private?
- */
-	public function generateuname($basename)
-	{
-
-	$umaneUsageCount = UserUtil::getUnameUsageCount($basename);   
-    	if ($umaneUsageCount) {			
-			$basename = $basename . '323';
-		$basename =	$this->generateuname($basename);
-		}
-			
-	  return $basename;
-	}	
-	
-	
-	
 	
   /**
  * Register me return user id .
@@ -155,29 +126,34 @@ class FConnect_Api_User extends Zikula_AbstractApi
 		//email first
 		$user_data = $this->getmyfb_userdata();
 		
-		if ($user_data){		
+		if ($user_data){
+						
 			$email = $user_data['email'];
 			//check if email is registered
 			//we should check first for the email settings in users module
 			//if ($this->getVar(Users_Constant::MODVAR_REQUIRE_UNIQUE_EMAIL, false)) {
 				
 			$emailUsageCount = UserUtil::getEmailUsageCount($email);
-            //}
             if ($emailUsageCount) {
-    		//get uid of user actually using this email
-    		$user_to_connect = ModUtil::apiFunc($this->name, 'admin', 'findUsers', array('email'=> $email));
-    		//connect
-
+    			//get uid of user actually using this email
+    			// should be only for email strict mode
+    			// what if there is more accounts with same email? create another one?
+    			$user_to_connect = ModUtil::apiFunc('Users', 'admin', 'findUsers', array('email'=> $email));
+    			//there can be only one :)
+    			$user_to_connect_id = $user_to_connect[0]['uid'];
+    			
+				$this->connectme($fb_id,$user_to_connect_id);
 			
-			$this->connectme($fb_id,$user_to_connect);
-			
-			return true;
+				return true;
             }
-
-			//process email for registration
 			
-			$uname = $this->getunnamefromemail($email);
-			
+			//no email used
+			//process email			
+			//generate uname
+			$basename = $this->getunnamefromemail($email);			
+			$uname = $this->generateuname($basename);
+						
+			// valid uname and email proceed to 
 			$reginfo = array(
 		     'uname'         => $uname,
 		     'pass'          => 'NO_USERS_AUTHENTICATION',
@@ -198,9 +174,46 @@ class FConnect_Api_User extends Zikula_AbstractApi
 	    	return true;
 	  	
 		}
-		
+
+		//Error no user data
 	 return false;
 	  
 	}
+ /**
+ * Get part?
+ */
+	public function getunnamefromemail($email)
+	{
+			
+		$email = explode('@',$email);
+		$basename = $email[0];
+				
+	  return $this->validatebasename($basename);
+	}
+	
+	
+ /**
+ *  fix basename lenght illegal characters etc..
+ */
+	public function validatebasename($basename)
+	{			
+	  return $basename;
+	}	
+	
+	
+/**
+ * uname need to be unique
+ */
+	public function generateuname($basename)
+	{
+		
+		$umaneUsageCount = UserUtil::getUnameUsageCount($basename);   
+    	if ($umaneUsageCount) {			
+			$basename = $basename . 'x';
+			$basename =	$this->generateuname($basename);
+		}
+			
+	  return $basename;
+	}	
 	
 }
