@@ -19,14 +19,11 @@ class FConnect_Controller_User extends Zikula_AbstractController
         }
 		
 		$fb_id = ModUtil::apiFunc($this->name, 'user', 'getmyfb_id');
-		
 		//$fb_data = ModUtil::apiFunc($this->name, 'user', 'getmyfb_userdata');
 		
 		if(!$fb_id) {
 		$loginUrl = ModUtil::apiFunc($this->name, 'user', 'getmyloginurl');
-		
-		$this->redirect($loginUrl);	
-		
+			$this->redirect($loginUrl);	
 		}
 				
 	
@@ -35,21 +32,20 @@ class FConnect_Controller_User extends Zikula_AbstractController
 		$uid = UserUtil::getVar('uid');	
 		// uid = 1 is the anonymous user
 	    if ($uid < 2) {
+	    					
+		if(ModUtil::apiFunc($this->name, 'user', 'logmein', $fb_id))
+		{	
+		$this->redirect();						
+		}else{		    	
+		 // if(ModUtil::apiFunc($this->name, 'user', 'registerme')){
+		  //  if(ModUtil::apiFunc($this->name, 'user', 'logmein', $fb_id))
+		//	{	
+		//	$this->redirect();						
+		//    }
+		//  }
 								
-			if(ModUtil::apiFunc($this->name, 'user', 'logmein', $fb_id)) {
-								
-				$this->redirect();						
+		}
 			
-			}else if(ModUtil::apiFunc($this->name, 'user', 'registerme')){			 			    	
-				
-				 if(ModUtil::apiFunc($this->name, 'user', 'logmein', $fb_id)){	
-				
-					$this->redirect();						
-				   
-				 }
-										
-			}
-		
 		}else{
 		    //user is logged in but not connected just connect	
 			//ModUtil::apiFunc($this->name, 'user', 'connectme');
