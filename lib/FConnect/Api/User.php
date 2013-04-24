@@ -14,121 +14,46 @@ class FConnect_Api_User extends Zikula_AbstractApi
    private $facebook;
    
 	
-   protected function initialize() 
-	{		
-	 require_once 'modules/FConnect/lib/vendor/Facebook/facebook.php';				
-	 $settings = ModUtil::getVar($this->name);
-	 $this->facebook = new Facebook(array(
-				'appId' => $settings['appid'],
-				'secret' => $settings['secretkey']
-				));	 
+	protected function initialize() 
+	{	 					
+	 $this->facebook = ModUtil::apiFunc($this->name, 'Facebook', 'facebook');  
+	}
 
-	}
-	
-  /**
- * Log in url .
- */
-   public function getmyloginurl()
-	{		
-	 $redirecturi = ModUtil::url($this->name, 'user', 'main', $args = array(), $ssl = null, $fragment = null, $fqurl = true, $forcelongurl = false, $forcelang=false);		
-	 return $this->facebook->getLoginUrl($params = array('scope' => 'email,read_stream','redirect_uri' => $redirecturi));					
-	}
-	
-  /**
- * FBID .
- */
-	public function getmyfb_id()
-	{
-	    $fb_id = $this->facebook->getUser();
-		
-		if ($fb_id) {
-			try {
-			    $user_profile = $this->facebook->api('/me');		  	
-			} catch (FacebookApiException $e) {
-			 	$fb_id = null;
-			}
-		}
-		
-	   return $fb_id;		
-	}
-  /**
- * User Data .
- */
-	public function getmyfb_userdata()
-	{
-	   return $this->facebook->api('/me');		
-	}
-	
-	
-  /**
- * Login .
- */
-	public function logmein($fb_id)
+
+	public function login($fb_id)
 	{
 			
 		$authenticationInfo = array(
               'fb_id' => $fb_id,
               'pass'     => false,
           );
+		  
     	$authenticationMethod = array(
              'modname'   => 'FConnect',
              'method'    => 'Facebook'
           );
- 
-     return UserUtil::loginUsing($authenticationMethod, $authenticationInfo, $rememberme, null, false);
-	
-	}
-  /**
- * find connected user
- */
-	public function get_myuid_bymyfb_id($fb_id)
-	{
-				
-		$connection = $this->entityManager->getRepository('FConnect_Entity_Connections')
-	                                   ->findOneBy(array('fb_id' => $fb_id));
-		if (!$connection) {
-	    $con = false;
-	    }else {                         
-	    $con = $connection->toArray();	
-	    }
-	
-	  return $con['user_id']; 
-	}	
-  /**
- * Setup connection private?
- */
-	public function connectme($fb_id,$user_id)
-	{
-				
-		$connection = new FConnect_Entity_Connections();
-		$connection->setFb_id($fb_id);
-		if (is_numeric($user_id)){
-		$connection->setUser_id($user_id);	
-		}else{
-		$connection->setUser_id(UserUtil::getVar('uid'));	
-		}
+		  
+		$uid = ModUtil::apiFunc($this->name, 'FacebookUser', 'get_zuid', $fb_id); 	  
+ 		
+		//clean this to eliminate error's on first log in 
+		LogUtil::getErrorMessages(true);
 		
-		$this->entityManager->persist($connection);
-		$this->entityManager->flush();	
-		
-	  return true;
-	}
+     	return UserUtil::loginUsing($authenticationMethod, $authenticationInfo, true, null, false, $uid);
+	
+}
 	
 	
-  /**
- * Register me return user id .
- */
-	public function registerme()
+	public function register()
 	{
 		
-		$fb_id = $this->facebook->getUser(); 
+		$fb_id = ModUtil::apiFunc($this->name, 'FacebookUser', 'getId'); 
 		//we need reg info so lets get it form facebook
 		//email first
-		$user_data = $this->getmyfb_userdata();
+		$me = ModUtil::apiFunc($this->name, 'FacebookUser', 'getMe');
 		
-		if ($user_data){
+		if ($me){
 						
-			$email = $user_data['email'];
+			$email = $me['email'];
 			//check if email is registered
 			//we should check first for the email settings in users module
 			//if ($this->getVar(Users_Constant::MODVAR_REQUIRE_UNIQUE_EMAIL, false)) {
@@ -142,7 +67,7 @@ class FConnect_Api_User extends Zikula_AbstractApi
     			//there can be only one :)
     			$user_to_connect_id = $user_to_connect[0]['uid'];
     			
-				$this->connectme($fb_id,$user_to_connect_id);
+				ModUtil::apiFunc($this->name, 'FacebookUser', 'set_zuid', array('fb_id'=> $fb_id,'z_uid'=> $user_to_connect_id));
 			
 				return true;
             }
@@ -159,17 +84,14 @@ class FConnect_Api_User extends Zikula_AbstractApi
 		     'pass'          => 'NO_USERS_AUTHENTICATION',
 		     'passreminder'  => 'Account created with Facebook',
 		     'email'         => $email,
-		     );	
-				
-			$registeredObj = ModUtil::apiFunc('Users', 'registration', 'registerNewUser', array(
-		                          'reginfo'           => $reginfo,
-		                         'usernotification'  => true,
-		                         'adminnotification' => true
-		                      ));
+		     );
+			 					
+			$registeredObj = ModUtil::apiFunc('FConnect', 'registration', 'createUser', $reginfo);
+					
+			ModUtil::apiFunc($this->name, 'FacebookUser', 'set_zuid', array('fb_id'=> $fb_id,'z_uid'=> $registeredObj['uid']));
+										  		
 			
-			$verified = ModUtil::apiFunc('Users', 'registration', 'verify', array('reginfo' => $registeredObj));	
-		
-	    	$this->connectme($fb_id,$verified['uid']);
+			$this->avatar();
 	    
 	    	return true;
 	  	
@@ -179,32 +101,60 @@ class FConnect_Api_User extends Zikula_AbstractApi
 	 return false;
 	  
 	}
+		
+	
+   public function avatar()
+   {
+									
+		$fb_id = ModUtil::apiFunc($this->name, 'FacebookUser', 'getId');
+		
+		if (isset($fb_id)) {
+		$uid = ModUtil::apiFunc($this->name, 'FacebookUser', 'get_zuid', $fb_id);		
+		} else {		
+		return false;					
+		}	
+	
+		$img = file_get_contents('https://graph.facebook.com/'.$fb_id.'/picture?type=large');
+		
+		$extension = 'jpg';
+		
+		$avatarpath = ModUtil::getVar('Users', 'avatarpath');
+        $avatarfilenamewithoutextension = 'pers_' . $uid;
+        $avatarfilename = $avatarfilenamewithoutextension . '.' . $extension;
+        $user_avatar = DataUtil::formatForOS($avatarpath . '/' . $avatarfilename);
+
+		file_put_contents($user_avatar, $img);
+				
+		UserUtil::setVar('avatar', $avatarfilename, $uid);
+		
+		return true;
+	}
+	
+
+
+
  /**
  * Get part?
  */
-	public function getunnamefromemail($email)
+	private function getunnamefromemail($email)
 	{
 			
 		$email = explode('@',$email);
 		$basename = $email[0];
 				
 	  return $this->validatebasename($basename);
-	}
-	
-	
+	}	
  /**
  *  fix basename lenght illegal characters etc..
  */
-	public function validatebasename($basename)
+	private function validatebasename($basename)
 	{			
 	  return $basename;
-	}	
-	
-	
+	}		
 /**
  * uname need to be unique
  */
-	public function generateuname($basename)
+	private function generateuname($basename)
 	{
 		
 		$umaneUsageCount = UserUtil::getUnameUsageCount($basename);   
@@ -214,6 +164,5 @@ class FConnect_Api_User extends Zikula_AbstractApi
 		}
 			
 	  return $basename;
-	}	
-	
+	}		
 }

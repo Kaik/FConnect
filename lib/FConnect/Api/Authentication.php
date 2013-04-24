@@ -34,9 +34,20 @@ class FConnect_Api_Authentication extends Zikula_Api_AbstractAuthentication
                 $this->__('Facebook Account'),
                 true
         );
-        
+		
+		$settings = ModUtil::getVar($this->name);
+		
+		$isEnabled = $settings['isenabled'];
+		
+		if ($isEnabled) {
             $authenticationMethod->enableForAuthentication();
             $authenticationMethod->enableForRegistration();
+        } else {
+            $authenticationMethod->disableForAuthentication();
+            $authenticationMethod->disableForRegistration();
+        }
+
+			
 
         $this->authenticationMethods['Facebook'] = $authenticationMethod;
 
@@ -52,7 +63,7 @@ class FConnect_Api_Authentication extends Zikula_Api_AbstractAuthentication
      */
     public function isReentrant()
     {
-        return true;
+        return false;
     }
 
     /**
@@ -296,20 +307,8 @@ class FConnect_Api_Authentication extends Zikula_Api_AbstractAuthentication
      *                         otherwise false if user not found or error.
      */
     public function getUidForAuthenticationInfo(array $args)
-    {
-        $authenticatedUid = false;
-		
-		$connection = $this->entityManager->getRepository('FConnect_Entity_Connections')
-	                                   ->findOneBy(array('fb_id' => $args['authentication_info']['fb_id']));
-		if (!$connection) {
-	    $con = false;
-	    }else {                         
-	    $con = $connection->toArray();	
-	    }
-		
-		$authenticatedUid = $con['user_id'];
-
-        return $authenticatedUid;
+    {	
+	  return (int)ModUtil::apiFunc($this->name, 'FacebookUser', 'get_zuid',$args['authentication_info']['fb_id']);
     }
 
     /**
@@ -335,20 +334,7 @@ class FConnect_Api_Authentication extends Zikula_Api_AbstractAuthentication
      */
     public function authenticateUser(array $args)
     {
-        $authenticatedUid = false;
-		
-        
-		$connection = $this->entityManager->getRepository('FConnect_Entity_Connections')
-	                                   ->findOneBy(array('fb_id' => $args['authentication_info']['fb_id']));
-		if (!$connection) {
-	    $con = false;
-	    }else {                         
-	    $con = $connection->toArray();	
-	    }
-		
-		$authenticatedUid = $con['user_id'];
-
-        return $authenticatedUid;
+	  return (int)ModUtil::apiFunc($this->name, 'FacebookUser', 'get_zuid',$args['authentication_info']['fb_id']); 
     }
     
     /**
